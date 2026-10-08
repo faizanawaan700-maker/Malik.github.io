@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer } from "./server.mjs";
+import ffmpegPath from "ffmpeg-static";
 
 const USERNAME = "studio-owner";
 const PASSWORD = "test-only-strong-password-2026";
@@ -9,6 +15,8 @@ const API_TOKEN = "test-replicate-token";
 const VALID_BODY = { prompt: "A quiet lake at sunrise.", style: "Cinematic" };
 
 async function withServer(run, options = {}) {
+  const videoOutputDirectory = options.videoOutputDirectory ||
+    await mkdtemp(join(tmpdir(), "ai-video-studio-test-"));
   const environment = options.environment || {
     REPLICATE_API_TOKEN: API_TOKEN,
     APP_USERNAME: USERNAME,
@@ -21,6 +29,7 @@ async function withServer(run, options = {}) {
     env: environment,
     fetchImpl: options.fetchImpl,
     now: options.now,
+    videoOutputDirectory,
   });
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -31,7 +40,38 @@ async function withServer(run, options = {}) {
     await new Promise((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());
     });
+    if (!options.videoOutputDirectory) {
+      await rm(videoOutputDirectory, { recursive: true, force: true });
+    }
   }
+}
+
+let videoFixturePromise;
+async function getSixSecondVideoFixture() {
+  if (!videoFixturePromise) {
+    videoFixturePromise = (async () => {
+      const directory = await mkdtemp(join(tmpdir(), "ai-video-studio-fixture-"));
+      const path = join(directory, "clip.mp4");
+      try {
+        const result = spawnSync(ffmpegPath, [
+          "-hide_banner",
+          "-loglevel", "error",
+          "-f", "lavfi",
+          "-i", "color=c=blue:s=160x90:r=24:d=6",
+          "-an",
+          "-c:v", "libx264",
+          "-pix_fmt", "yuv420p",
+          "-movflags", "+faststart",
+          path,
+        ], { encoding: "utf8", timeout: 60_000 });
+        assert.equal(result.status, 0, result.stderr || result.error?.message);
+        return await readFile(path);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    })();
+  }
+  return videoFixturePromise;
 }
 
 function jsonResponse(payload, status = 200) {
@@ -75,11 +115,75 @@ test("serves the login screen and protects it with same-origin browser policy", 
     assert.match(html, /Continue with GitHub/);
     assert.match(html, /\.auth-shell\[hidden\]\s*\{\s*display:\s*none;/);
     assert.match(html, /id="demoNotice"/);
-    assert.match(html, /hostname\.endsWith\("\.github\.io"\)/);
-    assert.match(html, /Video generation unavailable in free demo/);
+    assert.match(html, /function isLocalPrivateHost\(hostname\)/);
+    assert.match(html, /host === "localhost"/);
+    assert.match(html, /host === "127\.0\.0\.1"/);
+    assert.match(html, /host === "::1"/);
+    assert.match(html, /host\.endsWith\("\.localhost"\)/);
+    assert.match(html, /host\.endsWith\("\.local"\)/);
+    assert.match(html, /octets\[0\] === 192 && octets\[1\] === 168/);
+    assert.match(html, /window\.location\.protocol === "file:"/);
+    assert.match(html, /!isLocalPrivateHost\(hostname\)/);
+    assert.match(html, /hostname\.endsWith\("\.github\.io"\).*hostname\.endsWith\("\.netlify\.app"\)/);
+    assert.match(html, /Static preview only\./);
+    assert.match(html, /60-second MP4 · 10 clips merged/);
+    assert.match(html, /No payment is collected in this app/);
+    assert.match(html, /function setGenerationAvailability\(ready\)/);
+    assert.match(html, /generateButton\.disabled = ready !== true/);
+    assert.match(html, /Video generation is not configured on the private server/);
+    assert.match(html, /Combining clips into one MP4/);
+    assert.doesNotMatch(html, /videoPlaylist|videoUrls|Open the free video demo|Hugging Face/);
+    assert.match(html, /Video generation unavailable in static preview/);
     assert.match(html, /<script nonce="[a-zA-Z0-9+/]+=*">/);
     assert.match(html, /type="password"/);
     assert.doesNotMatch(html, /Your private access code|REPLICATE_API_TOKEN/);
+  });
+});
+
+test("enables the real generation UI on localhost when the backend is ready", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(baseUrl);
+    const html = await response.text();
+    const modeCode = html.match(/function isLocalPrivateHost\(hostname\) \{[\s\S]*?let requestInProgress = false;/)?.[0];
+    const availabilityCode = html.match(/function setGenerationAvailability\(ready\) \{[\s\S]*?\n        \}/)?.[0];
+    assert.ok(modeCode, "frontend host-mode logic should exist");
+    assert.ok(availabilityCode, "frontend readiness logic should exist");
+    assert.match(html, /fetch\("\/api\/videos"/);
+
+    const assessMode = (hostname, protocol, ready) => {
+      const generateHint = { textContent: "" };
+      const generateButton = { disabled: true };
+      const state = runInNewContext(
+        `${modeCode}\n${availabilityCode}\n({ isStaticDemo, setGenerationAvailability })`,
+        {
+          window: { location: { hostname, protocol } },
+          document: { getElementById: (id) => id === "generateHint" ? generateHint : null },
+          generateButton,
+        },
+      );
+      state.setGenerationAvailability(ready);
+      return { isStaticDemo: state.isStaticDemo, disabled: generateButton.disabled };
+    };
+
+    const sessionResponse = await fetch(`${baseUrl}/api/auth/session`);
+    const session = await sessionResponse.json();
+    assert.equal(session.ready, true);
+    assert.deepEqual(assessMode("localhost", "http:", session.ready), {
+      isStaticDemo: false,
+      disabled: false,
+    });
+    assert.deepEqual(assessMode("192.168.1.20", "http:", session.ready), {
+      isStaticDemo: false,
+      disabled: false,
+    });
+    assert.deepEqual(assessMode("malik.github.io", "https:", session.ready), {
+      isStaticDemo: true,
+      disabled: true,
+    });
+    assert.deepEqual(assessMode("localhost", "http:", false), {
+      isStaticDemo: false,
+      disabled: true,
+    });
   });
 });
 
@@ -99,6 +203,16 @@ test("reports login setup status without exposing server configuration", async (
       APP_PASSWORD: "",
       APP_SESSION_SECRET: "",
     },
+  });
+});
+
+test("reports generation readiness without returning the server-side API token", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/auth/session`);
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.ready, true);
+    assert.equal(JSON.stringify(payload).includes(API_TOKEN), false);
   });
 });
 
@@ -382,7 +496,7 @@ test("validates user input before calling the video provider", async () => {
 
     const unavailablePremium = await generateVideo(baseUrl, cookie, { ...VALID_BODY, duration: 90 });
     assert.equal(unavailablePremium.status, 400);
-    assert.match((await unavailablePremium.json()).error, /premium plans are not available/i);
+    assert.match((await unavailablePremium.json()).error, /longer durations are not available/i);
 
     const malformed = await fetch(`${baseUrl}/api/videos`, {
       method: "POST",
@@ -399,9 +513,13 @@ test("validates user input before calling the video provider", async () => {
   });
 });
 
-test("generates a 60-second free video from ten secured six-second clips", async () => {
+test("merges ten provider clips into one secured playable 60-second MP4", async () => {
+  const fixture = await getSixSecondVideoFixture();
+  const videoOutputDirectory = await mkdtemp(join(tmpdir(), "ai-video-studio-output-test-"));
   const providerRequests = [];
-  await withServer(async (baseUrl) => {
+  let clipDownloads = 0;
+  try {
+    await withServer(async (baseUrl) => {
     const { cookie } = await login(baseUrl);
     const started = await generateVideo(baseUrl, cookie, { ...VALID_BODY, duration: 60 });
     assert.equal(started.status, 202);
@@ -420,23 +538,68 @@ test("generates a 60-second free video from ten secured six-second clips", async
         assert.equal(progress.status, "processing");
         assert.equal(progress.completedSegments, segment + 1);
       } else {
-        assert.equal(progress.status, "succeeded");
+        assert.equal(progress.status, "combining");
         assert.equal(progress.completedSegments, 10);
-        assert.equal(progress.videoUrls.length, 10);
-        assert.deepEqual(progress.videoUrls, Array.from(
-          { length: 10 },
-          (_, index) => `https://replicate.delivery/clip-${index + 1}.mp4`,
-        ));
+        assert.equal("videoUrls" in progress, false);
       }
     }
+
+    let finished;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const response = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(job.id)}`, {
+        headers: sessionHeaders(cookie),
+      });
+      assert.equal(response.status, 200);
+      finished = await response.json();
+      if (finished.status !== "combining") break;
+    }
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.duration, 60);
+    assert.equal(finished.completedSegments, 10);
+    assert.equal(finished.videoUrl, `/api/videos/${job.id}/file`);
+    assert.equal("videoUrls" in finished, false);
+
+    const videoResponse = await fetch(new URL(finished.videoUrl, baseUrl), {
+      headers: sessionHeaders(cookie),
+    });
+    assert.equal(videoResponse.status, 200);
+    assert.equal(videoResponse.headers.get("content-type"), "video/mp4");
+    assert.match(videoResponse.headers.get("content-disposition"), /inline; filename="ai-video-/);
+    const finalVideo = Buffer.from(await videoResponse.arrayBuffer());
+    assert.ok(finalVideo.length > fixture.length);
+    assert.equal(finalVideo.subarray(4, 8).toString("ascii"), "ftyp");
+
+    const rangeResponse = await fetch(new URL(finished.videoUrl, baseUrl), {
+      headers: { ...sessionHeaders(cookie), Range: "bytes=0-31" },
+    });
+    assert.equal(rangeResponse.status, 206);
+    assert.equal(rangeResponse.headers.get("content-range"), `bytes 0-31/${finalVideo.length}`);
+    assert.equal((await rangeResponse.arrayBuffer()).byteLength, 32);
+
+    const inspected = spawnSync(ffmpegPath, [
+      "-hide_banner",
+      "-i", join(videoOutputDirectory, `${job.id}.mp4`),
+      "-f", "null",
+      "-",
+    ], { encoding: "utf8", timeout: 60_000 });
+    assert.equal(inspected.status, 0, inspected.stderr || inspected.error?.message);
+    assert.match(inspected.stderr, /Duration: 00:01:00(?:\.00)?/);
+
     const generationRequests = providerRequests.filter((request) => request.method === "POST");
     assert.equal(generationRequests.length, 10);
+    assert.equal(clipDownloads, 10);
     assert.match(generationRequests[0].body.input.prompt, /quiet lake at sunrise/);
     assert.match(generationRequests[9].body.input.prompt, /clip 10 of 10/);
   }, {
     fetchImpl: async (url, options) => {
+      const requestUrl = String(url);
+      if (requestUrl.startsWith("https://replicate.delivery/clip-")) {
+        clipDownloads += 1;
+        return new Response(fixture, { headers: { "Content-Type": "video/mp4" } });
+      }
       providerRequests.push({
-        url: String(url),
+        url: requestUrl,
         method: options.method || "GET",
         body: options.body ? JSON.parse(options.body) : null,
       });
@@ -444,14 +607,18 @@ test("generates a 60-second free video from ten secured six-second clips", async
         const segment = providerRequests.filter((request) => request.method === "POST").length;
         return jsonResponse({ id: `prediction_${String(segment).padStart(4, "0")}`, status: "processing" });
       }
-      const segment = Number(String(url).match(/prediction_(\d+)/)?.[1]);
+      const segment = Number(requestUrl.match(/prediction_(\d+)/)?.[1]);
       return jsonResponse({
         id: `prediction_${String(segment).padStart(4, "0")}`,
         status: "succeeded",
         output: `https://replicate.delivery/clip-${segment}.mp4`,
       });
     },
+    videoOutputDirectory,
   });
+  } finally {
+    await rm(videoOutputDirectory, { recursive: true, force: true });
+  }
 });
 
 test("rejects a second active long-video job from the same client", async () => {
@@ -463,6 +630,134 @@ test("rejects a second active long-video job from the same client", async () => 
     assert.equal(second.status, 429);
   }, {
     fetchImpl: async () => jsonResponse({ id: "prediction_1234", status: "processing" }),
+  });
+});
+
+test("marks a long-video job failed when a later provider clip fails", async () => {
+  const fixture = await getSixSecondVideoFixture();
+  let generationCount = 0;
+  await withServer(async (baseUrl) => {
+    const { cookie } = await login(baseUrl);
+    const started = await generateVideo(baseUrl, cookie, { ...VALID_BODY, duration: 60 });
+    const job = await started.json();
+    const response = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(job.id)}`, {
+      headers: sessionHeaders(cookie),
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.status, "failed");
+    assert.match(result.error, /could not generate this video/i);
+  }, {
+    fetchImpl: async (url, options) => {
+      if (String(url).startsWith("https://replicate.delivery/")) {
+        return new Response(fixture, { headers: { "Content-Type": "video/mp4" } });
+      }
+      if (options.method === "POST") {
+        generationCount += 1;
+        return generationCount === 1
+          ? jsonResponse({ id: "prediction_1234", status: "processing" })
+          : jsonResponse({ status: "failed" });
+      }
+      return jsonResponse({
+        id: "prediction_1234",
+        status: "succeeded",
+        output: "https://replicate.delivery/clip-1.mp4",
+      });
+    },
+  });
+});
+
+test("does not download generated clips from hosts outside Replicate delivery", async () => {
+  let clipDownloadRequests = 0;
+  let generationCount = 0;
+  await withServer(async (baseUrl) => {
+    const { cookie } = await login(baseUrl);
+    const started = await generateVideo(baseUrl, cookie, { ...VALID_BODY, duration: 60 });
+    const job = await started.json();
+
+    for (let segment = 0; segment < 10; segment += 1) {
+      const response = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(job.id)}`, {
+        headers: sessionHeaders(cookie),
+      });
+      assert.equal(response.status, 200);
+    }
+
+    let result;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const response = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(job.id)}`, {
+        headers: sessionHeaders(cookie),
+      });
+      result = await response.json();
+      if (result.status !== "combining") break;
+    }
+    assert.equal(result.status, "failed");
+    assert.match(result.error, /finished without a valid video URL/i);
+    assert.equal(clipDownloadRequests, 0);
+  }, {
+    fetchImpl: async (url, options) => {
+      const requestUrl = String(url);
+      if (requestUrl.startsWith("https://attacker.example/")) {
+        clipDownloadRequests += 1;
+        return new Response("not a video");
+      }
+      if (options.method === "POST") {
+        generationCount += 1;
+        return jsonResponse({
+          id: `prediction_${String(generationCount).padStart(4, "0")}`,
+          status: "processing",
+        });
+      }
+      const segment = Number(requestUrl.match(/prediction_(\d+)/)?.[1]);
+      return jsonResponse({
+        id: `prediction_${String(segment).padStart(4, "0")}`,
+        status: "succeeded",
+        output: "https://attacker.example/clip.mp4",
+      });
+    },
+  });
+});
+
+test("does not follow Replicate clip redirects to untrusted hosts", async (t) => {
+  let clipRequests = 0;
+  let untrustedRequests = 0;
+  t.mock.method(console, "error", () => {});
+  await withServer(async (baseUrl) => {
+    const { cookie } = await login(baseUrl);
+    const started = await generateVideo(baseUrl, cookie, { ...VALID_BODY, duration: 60 });
+    const job = await started.json();
+    const response = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(job.id)}`, {
+      headers: sessionHeaders(cookie),
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.status, "failed");
+    assert.match(result.error, /could not download a generated clip/i);
+    assert.equal(clipRequests, 1);
+    assert.equal(untrustedRequests, 0);
+  }, {
+    fetchImpl: async (url, options) => {
+      const requestUrl = String(url);
+      if (requestUrl.startsWith("https://replicate.delivery/")) {
+        clipRequests += 1;
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "https://attacker.example/private.mp4" },
+        });
+      }
+      if (requestUrl.startsWith("https://attacker.example/")) {
+        untrustedRequests += 1;
+        return new Response("should not be requested");
+      }
+      if (options.method === "POST") {
+        return jsonResponse({ id: "prediction_1234", status: "processing" });
+      }
+      return jsonResponse({
+        id: "prediction_1234",
+        status: "succeeded",
+        output: "https://replicate.delivery/clip.mp4",
+      });
+    },
   });
 });
 
@@ -486,6 +781,12 @@ test("prevents a different signed-in account from polling another account's long
       headers: sessionHeaders(otherUserCookie),
     });
     assert.equal(response.status, 403);
+    const videoFile = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(jobId)}/file`, {
+      headers: sessionHeaders(otherUserCookie),
+    });
+    assert.equal(videoFile.status, 403);
+    const unauthenticatedFile = await fetch(`${baseUrl}/api/videos/${encodeURIComponent(jobId)}/file`);
+    assert.equal(unauthenticatedFile.status, 401);
   }, {
     env: {
       APP_BASE_URL: "https://studio.example.com",
@@ -551,22 +852,29 @@ test("submits a prompt securely and returns a finished HTTPS video", async () =>
 });
 
 test("rejects insecure provider output URLs", async () => {
+  const invalidUrls = [
+    "http://insecure.example/video.mp4",
+    "https://attacker.example/video.mp4",
+    "https://user@replicate.delivery/video.mp4",
+  ];
   await withServer(async (baseUrl) => {
     const { cookie } = await login(baseUrl);
-    const response = await fetch(`${baseUrl}/api/videos/prediction_1234`, {
-      headers: sessionHeaders(cookie),
-    });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      id: "prediction_1234",
-      status: "failed",
-      error: "The provider finished without a valid video URL.",
-    });
+    for (const invalidUrl of invalidUrls) {
+      const response = await fetch(`${baseUrl}/api/videos/prediction_1234`, {
+        headers: sessionHeaders(cookie),
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        id: "prediction_1234",
+        status: "failed",
+        error: "The provider finished without a valid video URL.",
+      });
+    }
   }, {
     fetchImpl: async () => jsonResponse({
       id: "prediction_1234",
       status: "succeeded",
-      output: "http://insecure.example/video.mp4",
+      output: invalidUrls.shift(),
     }),
   });
 });

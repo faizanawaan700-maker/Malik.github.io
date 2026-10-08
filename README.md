@@ -4,15 +4,18 @@ A text-to-video app built around MiniMax Video-01 on Replicate. Clients can sign
 
 The app currently does not store a separate account database or link Google and GitHub identities together. Each identity is authenticated by its provider and held in a signed, HTTP-only session cookie for up to eight hours. Video generations use the app owner's Replicate account, so provider charges apply to the owner.
 
-## Free GitHub Pages preview
+## Free static previews
 
-Every push to `main` deploys a free static preview to GitHub Pages using `.github/workflows/pages.yml`. In the repository's **Settings → Pages**, select **GitHub Actions** as the build and deployment source if Pages is not already enabled. The preview shows the interface but explicitly disables sign-in and video generation; GitHub Pages cannot run this app's Node backend. Real authentication and AI video generation require a Node host and a configured video provider, which may charge for usage.
+Every push to `main` deploys a free static preview to GitHub Pages using `.github/workflows/pages.yml`. To use Netlify instead, import this GitHub repository in Netlify; `netlify.toml` configures its build command, skips the optional FFmpeg binary, and publishes only the generated `dist/` preview. The build intentionally disables sign-in and in-app generation, including on custom Netlify domains. GitHub Pages and a static Netlify deploy cannot run this app's Node backend. Netlify's Free plan has a 300-credit limit, and usage is subject to its current plan limits.
 
-Clients can request one six-second clip or a 60-second free-for-clients video. Since MiniMax Video-01 only generates six seconds per prediction, a 60-second video is ten separate clips played consecutively in the browser; transitions can be noticeable and it is not currently exported as one joined MP4. The app owner still pays the provider for those ten clips. Premium durations are shown as coming soon and cannot be generated until a payment system and longer-video workflow are configured.
+The static preview is intentionally read-only: it does not run the app's backend or connect to the real Replicate generator. The actual app runs on a private Node backend and uses the authenticated `/api/videos` flow described below.
+
+The separate Node backend uses paid MiniMax Video-01 through Replicate. A six-second request returns one generated clip. A 60-second request generates ten clips, downloads them on the server, and encodes them in order into one H.264 MP4 with FFmpeg; the browser receives only the final video URL, never the individual clip URLs. The merged video is served from the Node app at `/api/videos/<job-id>/file`, with the same signed-in account and byte-range checks used for video playback. The app does not collect payment, and the app owner pays the provider for each generated clip. Longer premium durations are not available.
 
 ## Requirements
 
 - Node.js 22 or newer.
+- The optional `ffmpeg-static` dependency installs a platform-specific FFmpeg binary for server-side MP4 encoding (standard Node-host installs include it). Set `FFMPEG_PATH` only if you need to use a separately installed FFmpeg binary.
 - A Replicate account and API token with access to the [`minimax/video-01` model](https://replicate.com/minimax/video-01).
 - A private session signing secret; generate one with `node -p "require('node:crypto').randomBytes(32).toString('base64url')"`
 - OAuth client credentials for whichever sign-in providers you enable.
@@ -44,12 +47,16 @@ In PowerShell, set environment variables for the current terminal session and st
 $env:REPLICATE_API_TOKEN = "your-private-replicate-token"
 $env:APP_SESSION_SECRET = "paste-the-random-session-secret-you-generated"
 $env:APP_BASE_URL = "http://localhost:3000"
+$env:APP_USERNAME = "studio-owner"
+$env:APP_PASSWORD = "use-a-private-password-at-least-16-characters"
 $env:GOOGLE_CLIENT_ID = "your-google-client-id"
 $env:GOOGLE_CLIENT_SECRET = "your-google-client-secret"
 $env:GITHUB_CLIENT_ID = "your-github-client-id"
 $env:GITHUB_CLIENT_SECRET = "your-github-client-secret"
 npm.cmd start
 ```
+
+Open `http://localhost:3000` in your browser; do not open `index.html` directly or serve the generated `dist/` directory. Localhost, loopback, and private LAN hosts served by `npm.cmd start` use the authenticated Node server mode, not the static demo. Sign in with the owner credentials or configure OAuth. Generation is enabled only after the server reports a Replicate token and session secret are configured. Keep `REPLICATE_API_TOKEN` in the server's environment only; it is never sent to the browser. The `.github.io` and `.netlify.app` previews, the Netlify `dist/` build, and `file://` pages, remain static and cannot generate videos.
 
 Register `http://localhost:3000/api/auth/callback/google` and/or `http://localhost:3000/api/auth/callback/github` as the provider callback URI for local development. Do not use HTTP for a non-local deployment. `.env.example` lists all supported settings.
 
@@ -62,8 +69,8 @@ Register `http://localhost:3000/api/auth/callback/google` and/or `http://localho
 5. In Google Cloud and GitHub, register the exact Render callback URLs listed above using the Render public origin.
 6. Deploy and open the HTTPS URL Render provides. GitHub Pages alone cannot run this private Node API.
 
-The server protects API calls with a signed HTTP-only session cookie, verifies OAuth state, and limits video generations. A 60-second request reserves capacity for all ten clips before starting; by default the global limit of 30 provider generations per hour therefore permits at most three 60-second videos per server per hour. `MAX_GENERATIONS_PER_HOUR` limits requests per client; the provider-generation limit is a fixed server-side safety cap. Rate limits and in-progress video jobs are held in memory and reset if the service restarts, so a restart can interrupt a long video. Anyone who can sign in can use the app owner's Replicate balance.
+The server protects API calls and final MP4 playback with a signed HTTP-only session cookie, verifies OAuth state, and limits video generations. A 60-second request reserves capacity for all ten clips before starting; by default the global limit of 30 provider generations per hour therefore permits at most three 60-second videos per server per hour. `MAX_GENERATIONS_PER_HOUR` limits requests per client; the provider-generation limit is a fixed server-side safety cap. Rate limits, jobs, and output ownership are held in memory and reset if the service restarts, so a restart interrupts active work and invalidates the temporary video URLs. Merged MP4 files are stored on the server's local temporary filesystem and removed after 30 minutes; `VIDEO_OUTPUT_DIRECTORY` can select another local path. On hosts with ephemeral filesystems, restarting or replacing the instance removes the files. Anyone who can sign in can use the app owner's Replicate balance.
 
 ## Model limitations
 
-MiniMax Video-01 through Replicate currently produces six-second landscape clips from text prompts. Longer videos in this app are a sequential playback of separate clips rather than a single stitched download. The interface uses the model's supported format rather than offering portrait/square output it cannot deliver. Style is guided through the prompt because this model does not expose a dedicated style parameter. Generation time and output availability depend on the provider. See the [model API](https://replicate.com/minimax/video-01/api) and [Replicate prediction docs](https://replicate.com/docs/topics/predictions/create-a-prediction).
+MiniMax Video-01 through Replicate currently produces six-second landscape clips. The 60-second option trims and encodes ten clips in sequence as one 1280×720, 24-fps H.264 MP4; generated sound is not included, clip-to-clip visual consistency can vary, and actual duration depends on provider output. Clips larger than 32 MiB are rejected. The merge runs on the app server and needs CPU, temporary disk space, and FFmpeg; generation and encoding can take several minutes. The interface uses landscape output rather than offering portrait/square output it cannot deliver. Style is guided through the prompt because this model does not expose a dedicated style parameter. See the [model API](https://replicate.com/minimax/video-01/api) and [Replicate prediction docs](https://replicate.com/docs/topics/predictions/create-a-prediction).

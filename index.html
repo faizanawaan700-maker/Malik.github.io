@@ -292,23 +292,6 @@
       }
       .empty-state h3 { margin: 0 0 6px; color: #e9e7ee; font-size: 0.8rem; font-weight: 600; }
       .empty-state p { margin: 0; color: #8b8996; font-size: 0.7rem; line-height: 1.6; }
-      .video-controls {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 21px 12px 11px;
-        background: linear-gradient(transparent, rgb(0 0 0 / 45%));
-        color: #b7b5c0;
-        font-size: 0.61rem;
-      }
-      .video-stage.has-video .video-controls { display: none; }
-      .play { color: #e9e7ef; font-size: 0.74rem; }
-      .timeline { height: 2px; flex: 1; border-radius: 4px; background: rgb(255 255 255 / 25%); }
-      .timeline span { display: block; width: 8%; height: 100%; border-radius: inherit; background: #d5d0e0; }
       .preview-meta {
         display: flex;
         align-items: center;
@@ -361,6 +344,10 @@
       .feature p { margin: 0; color: #92919c; font-size: 0.64rem; line-height: 1.55; }
       .footer { padding: 0 0 24px; color: #797883; font-size: 0.67rem; line-height: 1.6; text-align: center; }
       .demo-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
         margin: 18px auto 0;
         padding: 12px 15px;
         border: 1px solid rgb(235 170 111 / 30%);
@@ -372,6 +359,23 @@
         text-align: center;
       }
       .demo-notice strong { color: #ffe3c3; }
+      .demo-copy { margin: 0; }
+      .demo-link {
+        display: inline-flex;
+        min-height: 36px;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        padding: 7px 11px;
+        border: 1px solid rgb(255 227 195 / 35%);
+        border-radius: 8px;
+        color: #ffe3c3;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .demo-link:hover { background: rgb(255 227 195 / 8%); }
+      .demo-link:focus-visible { outline: 2px solid white; outline-offset: 2px; }
       .generate-button:disabled { cursor: not-allowed; opacity: 0.65; }
       .auth-shell { display: grid; min-height: 100vh; align-content: start; }
       .auth-shell[hidden] { display: none; }
@@ -482,6 +486,7 @@
         .how-it-works { grid-template-columns: 1fr; gap: 8px; }
         .feature { padding: 11px; }
         .login-card { padding: 22px; }
+        .demo-notice { align-items: stretch; flex-direction: column; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
@@ -522,7 +527,7 @@
 
     <div id="appShell" hidden>
     <aside class="shell demo-notice" id="demoNotice" role="status" hidden>
-      <strong>Free preview only.</strong> Sign-in and AI video generation need a paid server and provider account, so they are turned off on this demo site.
+      <p class="demo-copy"><strong>Static preview only.</strong> Sign-in and in-app generation are disabled here. Run this app on localhost or a private Node host with a configured server-side Replicate token to generate video.</p>
     </aside>
     <header class="topbar shell">
       <a class="brand" href="./" aria-label="AI Video Studio home">
@@ -579,12 +584,10 @@
               <div class="field">
                 <label for="duration">Video length</label>
                 <select id="duration" name="duration">
-                  <option value="60">Free · 60 seconds</option>
-                  <option value="6">6 seconds · one clip</option>
-                  <option value="90" disabled>Premium · 90 seconds (coming soon)</option>
-                  <option value="120" disabled>Premium · 120 seconds (coming soon)</option>
+                  <option value="60">60-second MP4 · 10 clips merged</option>
+                  <option value="6">6 seconds · 1 clip</option>
                 </select>
-                <span class="field-hint" id="durationHint">Free for clients: ten 6-second AI clips played one after another. Provider charges still apply to the studio owner.</span>
+                <span class="field-hint" id="durationHint">The server merges ten generated 6-second clips into one MP4. Provider charges still apply for each clip.</span>
               </div>
             </div>
 
@@ -596,7 +599,7 @@
 
             <div class="submit-row">
               <button class="generate-button" type="submit"><span aria-hidden="true">✦</span> Generate video</button>
-              <p class="submit-hint">Free for clients. The studio owner pays AI provider charges. Premium lengths will open after payment setup.</p>
+              <p class="submit-hint" id="generateHint">No payment is collected in this app. Each generation uses paid Replicate credits charged to the app owner.</p>
             </div>
           </form>
         </section>
@@ -616,12 +619,6 @@
                 <h3>Your video will appear here</h3>
                 <p>Write a prompt and pick a style. Your creation will show up in this space.</p>
               </div>
-              <div class="video-controls" aria-hidden="true">
-                <span class="play">▶</span>
-                <span class="timeline"><span></span></span>
-                <span id="previewDuration">1:00</span>
-                <span>⛶</span>
-              </div>
             </div>
             <div class="preview-meta">
               <span class="meta-format" id="previewRatio">▰ &nbsp;16:9 Landscape</span>
@@ -639,14 +636,14 @@
         </article>
         <article class="feature">
           <span class="feature-icon" aria-hidden="true">◫</span>
-          <div><h2>Choose your look</h2><p>Select a style for your 60-second video or a single 6-second clip.</p></div>
+          <div><h2>Choose your look</h2><p id="workflowDescription">Select a style for your 60-second video or a single 6-second clip.</p></div>
         </article>
         <article class="feature">
           <span class="feature-icon" aria-hidden="true">✦</span>
-          <div><h2>Powered by MiniMax Video-01</h2><p>60 seconds combines ten AI clips. Clip-to-clip consistency can vary.</p></div>
+          <div><h2 id="providerHeading">Powered by MiniMax Video-01</h2><p id="providerDescription">The 60-second option combines ten AI clips into one MP4. Clip-to-clip consistency can vary.</p></div>
         </article>
       </section>
-      <footer class="footer">Sign in with Google or GitHub. Video generation uses the studio owner's Replicate account and may incur provider charges; API tokens stay on the server.</footer>
+      <footer class="footer" id="footerNotice">Sign in with Google or GitHub. Video generation uses the studio owner's Replicate account and may incur provider charges; API tokens stay on the server.</footer>
     </main>
     </div>
 
@@ -671,9 +668,25 @@
         const videoStage = document.getElementById("videoStage");
         const emptyState = document.querySelector(".empty-state");
         const previewStatus = document.getElementById("previewStatus");
-        const isStaticDemo = window.location.hostname.endsWith(".github.io");
-        let videoPlaylist = [];
-        let playlistIndex = 0;
+        function isLocalPrivateHost(hostname) {
+          const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+          if (host === "localhost" || host === "127.0.0.1" || host === "::1" ||
+            host.endsWith(".localhost") || host.endsWith(".local")) {
+            return true;
+          }
+          if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return false;
+          const octets = host.split(".").map(Number);
+          if (octets.some((octet) => octet > 255)) return false;
+          return octets[0] === 10 ||
+            octets[0] === 127 ||
+            octets[0] === 192 && octets[1] === 168 ||
+            octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31;
+        }
+
+        const hostname = window.location.hostname;
+        const isStaticDemo = window.location.protocol === "file:" ||
+          !isLocalPrivateHost(hostname) &&
+          (hostname.endsWith(".github.io") || hostname.endsWith(".netlify.app"));
         let requestInProgress = false;
 
         function showLogin(message = "") {
@@ -712,6 +725,14 @@
           return data;
         }
 
+        function setGenerationAvailability(ready) {
+          if (isStaticDemo) return;
+          generateButton.disabled = ready !== true;
+          document.getElementById("generateHint").textContent = ready === true
+            ? "No payment is collected in this app. Each generation uses paid Replicate credits charged to the app owner."
+            : "Video generation is not configured on the private server. Ask the app owner to finish setup.";
+        }
+
         loginForm.addEventListener("submit", async (event) => {
           event.preventDefault();
           if (loginButton.disabled) return;
@@ -730,6 +751,9 @@
               }),
             });
             await readLoginResponse(response);
+            const sessionResponse = await fetch("/api/auth/session");
+            const session = await readLoginResponse(sessionResponse);
+            setGenerationAvailability(session.ready);
             loginForm.reset();
             showApp();
           } catch (error) {
@@ -781,10 +805,9 @@
         function updatePreviewMeta() {
           const selectedDuration = Number(duration.value);
           document.getElementById("previewStyle").textContent = `${style.value} · ${selectedDuration} sec`;
-          document.getElementById("previewDuration").textContent = selectedDuration === 60 ? "1:00" : "0:06";
           document.getElementById("durationHint").textContent = selectedDuration === 60
-            ? "Free for clients: ten 6-second AI clips played one after another. Scene transitions may vary; provider charges still apply to the studio owner."
-            : "One 6-second AI clip. Free for clients; provider charges still apply to the studio owner.";
+            ? "The server merges ten generated 6-second clips into one MP4. The app owner pays the provider for each clip."
+            : "One 6-second clip. The app owner pays the provider for each generation.";
         }
 
         updatePreviewMeta();
@@ -815,50 +838,29 @@
             await new Promise((resolve) => window.setTimeout(resolve, 3000));
             const response = await fetch(`/api/videos/${encodeURIComponent(predictionId)}`);
             const prediction = await readResponse(response);
-            if (isLongVideo && prediction.status === "succeeded") {
-              if (!Array.isArray(prediction.videoUrls) ||
-                prediction.videoUrls.length !== 10 ||
-                prediction.videoUrls.some((url) => typeof url !== "string" || !url.startsWith("https://"))) {
-                throw new Error("The video service returned an incomplete 60-second video.");
-              }
-              return prediction.videoUrls;
-            }
             if (prediction.status === "succeeded" && typeof prediction.videoUrl === "string") {
-              return [prediction.videoUrl];
+              return prediction.videoUrl;
             }
             if (prediction.status === "failed") {
               throw new Error(prediction.error || "The video provider could not generate this clip. Try another prompt.");
             }
-            if (prediction.status !== "starting" && prediction.status !== "processing") {
+            if (prediction.status !== "starting" &&
+              prediction.status !== "processing" &&
+              prediction.status !== "combining") {
               throw new Error("The provider returned an unexpected video status.");
             }
-            previewStatus.textContent = isLongVideo
-              ? `Creating 60-second video · ${prediction.completedSegments || 0}/10 clips`
-              : prediction.status === "starting" ? "Starting video…" : "Creating video…";
+            previewStatus.textContent = prediction.status === "combining"
+              ? "Combining clips into one MP4…"
+              : isLongVideo
+                ? `Creating 60-second video · ${prediction.completedSegments || 0}/10 clips`
+                : prediction.status === "starting" ? "Starting video…" : "Creating video…";
           }
           throw new Error("Video generation is taking longer than expected. Please try again in a moment.");
         }
 
         videoElement.addEventListener("ended", () => {
-          if (playlistIndex + 1 >= videoPlaylist.length) {
-            previewStatus.textContent = videoPlaylist.length > 1 ? "Your 60-second video is finished" : "Your video is finished";
-            return;
-          }
-          playlistIndex += 1;
-          videoElement.src = videoPlaylist[playlistIndex];
-          videoElement.load();
-          previewStatus.textContent = `Playing clip ${playlistIndex + 1} of ${videoPlaylist.length}`;
-          videoElement.play().catch(() => {
-            showMessage("The next clip is ready. Press play to continue your video.", false);
-          });
+          previewStatus.textContent = "Your video is finished";
         });
-
-        videoElement.addEventListener("play", () => {
-          if (videoPlaylist.length > 1) {
-            previewStatus.textContent = `Playing clip ${playlistIndex + 1} of ${videoPlaylist.length}`;
-          }
-        });
-
         form.addEventListener("submit", async (event) => {
           event.preventDefault();
           if (requestInProgress) return;
@@ -874,8 +876,6 @@
           previewStatus.textContent = "Connecting to video provider…";
           generationMessage.classList.remove("show");
           videoElement.pause();
-          videoPlaylist = [];
-          playlistIndex = 0;
           videoElement.removeAttribute("src");
           videoElement.hidden = true;
           videoStage.classList.remove("has-video");
@@ -894,30 +894,32 @@
               }),
             });
             const prediction = await readResponse(response);
-            let videoUrls = prediction.videoUrl ? [prediction.videoUrl] : null;
-            if (!videoUrls && typeof prediction.id === "string") {
+            let videoUrl = prediction.videoUrl || null;
+            if (!videoUrl && typeof prediction.id === "string") {
               previewStatus.textContent = "Video queued…";
-              videoUrls = await waitForVideo(prediction.id, selectedDuration);
+              videoUrl = await waitForVideo(prediction.id, selectedDuration);
             }
-            if (!Array.isArray(videoUrls) || videoUrls.length === 0 ||
-              videoUrls.some((url) => typeof url !== "string" || !url.startsWith("https://"))) {
+            if (typeof videoUrl !== "string") {
+              throw new Error("The video service did not return a playable video URL.");
+            }
+            let parsedVideoUrl;
+            try {
+              parsedVideoUrl = new URL(videoUrl, window.location.href);
+            } catch {
+              parsedVideoUrl = null;
+            }
+            if (!parsedVideoUrl ||
+              (parsedVideoUrl.protocol !== "https:" && parsedVideoUrl.origin !== window.location.origin)) {
               throw new Error("The provider finished without returning a secure video URL.");
             }
 
-            videoPlaylist = videoUrls;
-            playlistIndex = 0;
-            videoElement.src = videoPlaylist[0];
+            videoElement.src = parsedVideoUrl.href;
             videoElement.hidden = false;
             videoStage.classList.add("has-video");
             emptyState.hidden = true;
             videoElement.load();
-            previewStatus.textContent = videoPlaylist.length > 1 ? "Your 60-second video is ready" : "Your video is ready";
-            showMessage(
-              videoPlaylist.length > 1
-                ? "Your video is ready. Press play to watch the ten clips in sequence. Scene transitions may not be seamless."
-                : "Your video is ready. Press play to watch it.",
-              false,
-            );
+            previewStatus.textContent = selectedDuration === 60 ? "Your merged MP4 is ready" : "Your video is ready";
+            showMessage("Your video is ready. Press play to watch it.", false);
           } catch (error) {
             previewStatus.textContent = "Generation failed";
             if (error instanceof Error && error.message === "Please log in again to continue.") {
@@ -937,13 +939,26 @@
           appShell.hidden = false;
           document.getElementById("demoNotice").hidden = false;
           document.getElementById("logoutButton").hidden = true;
+          duration.value = "6";
+          duration.disabled = true;
+          updatePreviewMeta();
+          document.getElementById("durationHint").textContent =
+            "Static preview only. Run the app on localhost or a private Node host with the server-side Replicate token to generate real video.";
+          document.getElementById("generateHint").textContent =
+            "This static page cannot generate video. Use the authenticated local/private app backend.";
+          document.getElementById("providerHeading").textContent = "Private server required";
+          document.getElementById("providerDescription").textContent =
+            "Real generation uses the app's authenticated backend and Replicate integration, not a public demo provider.";
+          document.getElementById("workflowDescription").textContent =
+            "Open the app on localhost or a private host to use the live backend.";
+          document.querySelector(".empty-state h3").textContent = "Preview only";
+          document.querySelector(".empty-state p").textContent =
+            "This static page does not have access to the server-side video generator.";
+          document.getElementById("footerNotice").textContent =
+            "This static preview is read-only. Real generation runs only on the authenticated local/private backend with a server-side Replicate token.";
           generateButton.disabled = true;
-          generateButton.textContent = "Video generation unavailable in free demo";
+          generateButton.textContent = "Video generation unavailable in static preview";
           previewStatus.textContent = "Preview only";
-          showMessage(
-            "This free GitHub Pages demo shows the app interface. Sign-in and real AI video generation require a private server and a paid video-provider account.",
-            true,
-          );
           return;
         }
 
@@ -952,6 +967,7 @@
           .then(readLoginResponse)
           .then((session) => {
             const providers = session.providers || {};
+            setGenerationAvailability(session.ready);
             document.getElementById("googleLogin").hidden = providers.google !== true;
             document.getElementById("githubLogin").hidden = providers.github !== true;
             loginProviders.hidden = providers.google !== true && providers.github !== true;
