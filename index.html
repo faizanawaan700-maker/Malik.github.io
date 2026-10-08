@@ -360,6 +360,19 @@
       .feature h2 { margin: 1px 0 4px; font-size: 0.72rem; font-weight: 600; }
       .feature p { margin: 0; color: #92919c; font-size: 0.64rem; line-height: 1.55; }
       .footer { padding: 0 0 24px; color: #797883; font-size: 0.67rem; line-height: 1.6; text-align: center; }
+      .demo-notice {
+        margin: 18px auto 0;
+        padding: 12px 15px;
+        border: 1px solid rgb(235 170 111 / 30%);
+        border-radius: 10px;
+        background: rgb(235 170 111 / 8%);
+        color: #f0d4b4;
+        font-size: 0.76rem;
+        line-height: 1.55;
+        text-align: center;
+      }
+      .demo-notice strong { color: #ffe3c3; }
+      .generate-button:disabled { cursor: not-allowed; opacity: 0.65; }
       .auth-shell { display: grid; min-height: 100vh; align-content: start; }
       .auth-shell[hidden] { display: none; }
       .login-card {
@@ -508,6 +521,9 @@
     </main>
 
     <div id="appShell" hidden>
+    <aside class="shell demo-notice" id="demoNotice" role="status" hidden>
+      <strong>Free preview only.</strong> Sign-in and AI video generation need a paid server and provider account, so they are turned off on this demo site.
+    </aside>
     <header class="topbar shell">
       <a class="brand" href="./" aria-label="AI Video Studio home">
         <span class="brand-icon" aria-hidden="true">✦</span>
@@ -655,6 +671,7 @@
         const videoStage = document.getElementById("videoStage");
         const emptyState = document.querySelector(".empty-state");
         const previewStatus = document.getElementById("previewStatus");
+        const isStaticDemo = window.location.hostname.endsWith(".github.io");
         let videoPlaylist = [];
         let playlistIndex = 0;
         let requestInProgress = false;
@@ -726,6 +743,7 @@
         });
 
         document.getElementById("logoutButton").addEventListener("click", async () => {
+          if (isStaticDemo) return;
           try {
             const response = await fetch("/api/auth/logout", { method: "POST" });
             await readLoginResponse(response);
@@ -913,6 +931,21 @@
             generateButton.innerHTML = '<span aria-hidden="true">✦</span> Generate video';
           }
         });
+
+        if (isStaticDemo) {
+          loginScreen.hidden = true;
+          appShell.hidden = false;
+          document.getElementById("demoNotice").hidden = false;
+          document.getElementById("logoutButton").hidden = true;
+          generateButton.disabled = true;
+          generateButton.textContent = "Video generation unavailable in free demo";
+          previewStatus.textContent = "Preview only";
+          showMessage(
+            "This free GitHub Pages demo shows the app interface. Sign-in and real AI video generation require a private server and a paid video-provider account.",
+            true,
+          );
+          return;
+        }
 
         const authError = readAuthError();
         fetch("/api/auth/session")

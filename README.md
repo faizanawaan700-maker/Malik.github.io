@@ -4,6 +4,10 @@ A text-to-video app built around MiniMax Video-01 on Replicate. Clients can sign
 
 The app currently does not store a separate account database or link Google and GitHub identities together. Each identity is authenticated by its provider and held in a signed, HTTP-only session cookie for up to eight hours. Video generations use the app owner's Replicate account, so provider charges apply to the owner.
 
+## Free GitHub Pages preview
+
+Every push to `main` deploys a free static preview to GitHub Pages using `.github/workflows/pages.yml`. In the repository's **Settings → Pages**, select **GitHub Actions** as the build and deployment source if Pages is not already enabled. The preview shows the interface but explicitly disables sign-in and video generation; GitHub Pages cannot run this app's Node backend. Real authentication and AI video generation require a Node host and a configured video provider, which may charge for usage.
+
 Clients can request one six-second clip or a 60-second free-for-clients video. Since MiniMax Video-01 only generates six seconds per prediction, a 60-second video is ten separate clips played consecutively in the browser; transitions can be noticeable and it is not currently exported as one joined MP4. The app owner still pays the provider for those ten clips. Premium durations are shown as coming soon and cannot be generated until a payment system and longer-video workflow are configured.
 
 ## Requirements

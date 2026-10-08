@@ -74,6 +74,9 @@ test("serves the login screen and protects it with same-origin browser policy", 
     assert.match(html, /Continue with Google/);
     assert.match(html, /Continue with GitHub/);
     assert.match(html, /\.auth-shell\[hidden\]\s*\{\s*display:\s*none;/);
+    assert.match(html, /id="demoNotice"/);
+    assert.match(html, /hostname\.endsWith\("\.github\.io"\)/);
+    assert.match(html, /Video generation unavailable in free demo/);
     assert.match(html, /<script nonce="[a-zA-Z0-9+/]+=*">/);
     assert.match(html, /type="password"/);
     assert.doesNotMatch(html, /Your private access code|REPLICATE_API_TOKEN/);
