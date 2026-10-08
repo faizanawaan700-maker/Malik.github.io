@@ -4,11 +4,13 @@ A text-to-video app built around MiniMax Video-01 on Replicate. Clients can sign
 
 The app currently does not store a separate account database or link Google and GitHub identities together. Each identity is authenticated by its provider and held in a signed, HTTP-only session cookie for up to eight hours. Video generations use the app owner's Replicate account, so provider charges apply to the owner.
 
-## Free GitHub Pages preview
+## Free static previews
 
-Every push to `main` deploys a free static preview to GitHub Pages using `.github/workflows/pages.yml`. In the repository's **Settings → Pages**, select **GitHub Actions** as the build and deployment source if Pages is not already enabled. The preview shows the interface but explicitly disables sign-in and video generation; GitHub Pages cannot run this app's Node backend. Real authentication and AI video generation require a Node host and a configured video provider, which may charge for usage.
+Every push to `main` deploys a free static preview to GitHub Pages using `.github/workflows/pages.yml`. To use Netlify instead, import this GitHub repository in Netlify; `netlify.toml` configures its build command and publishes only the generated `dist/` preview. The build intentionally disables sign-in and in-app generation, including on custom Netlify domains. GitHub Pages and a static Netlify deploy cannot run this app's Node backend. Netlify's Free plan has a 300-credit limit, and usage is subject to its current plan limits.
 
-Clients can request one six-second clip or a 60-second free-for-clients video. Since MiniMax Video-01 only generates six seconds per prediction, a 60-second video is ten separate clips played consecutively in the browser; transitions can be noticeable and it is not currently exported as one joined MP4. The app owner still pays the provider for those ten clips. Premium durations are shown as coming soon and cannot be generated until a payment system and longer-video workflow are configured.
+The static preview links to a separate public [Hugging Face LTX Video ZeroGPU demo](https://huggingface.co/spaces/DeepRat/LTX-Video-ZeroGPU-Optimized) for short video tests. That is not this app's API or a production service: its own documentation says output is up to about 8.5 seconds, public Spaces can be queued or rate-limited, and Hugging Face's current ZeroGPU documentation lists 2 GPU minutes per day for unauthenticated visitors and 5 for free accounts. Prompts are sent to that third party; do not enter private information. Availability and quotas can change.
+
+The separate Node backend still uses paid MiniMax Video-01 through Replicate. Clients can request one six-second clip or a 60-second free-for-clients video; the 60-second result is ten separate clips played consecutively, not one joined MP4, and the app owner pays the provider. Premium durations remain unavailable until payment and a longer-video workflow are configured.
 
 ## Requirements
 

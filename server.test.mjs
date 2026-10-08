@@ -75,7 +75,9 @@ test("serves the login screen and protects it with same-origin browser policy", 
     assert.match(html, /Continue with GitHub/);
     assert.match(html, /\.auth-shell\[hidden\]\s*\{\s*display:\s*none;/);
     assert.match(html, /id="demoNotice"/);
-    assert.match(html, /hostname\.endsWith\("\.github\.io"\)/);
+    assert.match(html, /hostname\.endsWith\("\.github\.io"\).*hostname\.endsWith\("\.netlify\.app"\)/);
+    assert.match(html, /Open the free video demo/);
+    assert.match(html, /prompts are sent to Hugging Face/i);
     assert.match(html, /Video generation unavailable in free demo/);
     assert.match(html, /<script nonce="[a-zA-Z0-9+/]+=*">/);
     assert.match(html, /type="password"/);

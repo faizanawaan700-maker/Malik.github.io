@@ -361,6 +361,10 @@
       .feature p { margin: 0; color: #92919c; font-size: 0.64rem; line-height: 1.55; }
       .footer { padding: 0 0 24px; color: #797883; font-size: 0.67rem; line-height: 1.6; text-align: center; }
       .demo-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
         margin: 18px auto 0;
         padding: 12px 15px;
         border: 1px solid rgb(235 170 111 / 30%);
@@ -372,6 +376,23 @@
         text-align: center;
       }
       .demo-notice strong { color: #ffe3c3; }
+      .demo-copy { margin: 0; }
+      .demo-link {
+        display: inline-flex;
+        min-height: 36px;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        padding: 7px 11px;
+        border: 1px solid rgb(255 227 195 / 35%);
+        border-radius: 8px;
+        color: #ffe3c3;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .demo-link:hover { background: rgb(255 227 195 / 8%); }
+      .demo-link:focus-visible { outline: 2px solid white; outline-offset: 2px; }
       .generate-button:disabled { cursor: not-allowed; opacity: 0.65; }
       .auth-shell { display: grid; min-height: 100vh; align-content: start; }
       .auth-shell[hidden] { display: none; }
@@ -482,6 +503,7 @@
         .how-it-works { grid-template-columns: 1fr; gap: 8px; }
         .feature { padding: 11px; }
         .login-card { padding: 22px; }
+        .demo-notice { align-items: stretch; flex-direction: column; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
@@ -522,7 +544,8 @@
 
     <div id="appShell" hidden>
     <aside class="shell demo-notice" id="demoNotice" role="status" hidden>
-      <strong>Free preview only.</strong> Sign-in and AI video generation need a paid server and provider account, so they are turned off on this demo site.
+      <p class="demo-copy"><strong>Free static preview.</strong> Sign-in and in-app generation are off here. The shared free demo makes short clips only; queue and daily quota apply, and prompts are sent to Hugging Face.</p>
+      <a class="demo-link" id="freeDemoLink" href="https://huggingface.co/spaces/DeepRat/LTX-Video-ZeroGPU-Optimized" target="_blank" rel="noopener noreferrer">Open the free video demo ↗</a>
     </aside>
     <header class="topbar shell">
       <a class="brand" href="./" aria-label="AI Video Studio home">
@@ -596,7 +619,7 @@
 
             <div class="submit-row">
               <button class="generate-button" type="submit"><span aria-hidden="true">✦</span> Generate video</button>
-              <p class="submit-hint">Free for clients. The studio owner pays AI provider charges. Premium lengths will open after payment setup.</p>
+              <p class="submit-hint" id="generateHint">Free for clients. The studio owner pays AI provider charges. Premium lengths will open after payment setup.</p>
             </div>
           </form>
         </section>
@@ -639,14 +662,14 @@
         </article>
         <article class="feature">
           <span class="feature-icon" aria-hidden="true">◫</span>
-          <div><h2>Choose your look</h2><p>Select a style for your 60-second video or a single 6-second clip.</p></div>
+          <div><h2>Choose your look</h2><p id="workflowDescription">Select a style for your 60-second video or a single 6-second clip.</p></div>
         </article>
         <article class="feature">
           <span class="feature-icon" aria-hidden="true">✦</span>
-          <div><h2>Powered by MiniMax Video-01</h2><p>60 seconds combines ten AI clips. Clip-to-clip consistency can vary.</p></div>
+          <div><h2 id="providerHeading">Powered by MiniMax Video-01</h2><p id="providerDescription">60 seconds combines ten AI clips. Clip-to-clip consistency can vary.</p></div>
         </article>
       </section>
-      <footer class="footer">Sign in with Google or GitHub. Video generation uses the studio owner's Replicate account and may incur provider charges; API tokens stay on the server.</footer>
+      <footer class="footer" id="footerNotice">Sign in with Google or GitHub. Video generation uses the studio owner's Replicate account and may incur provider charges; API tokens stay on the server.</footer>
     </main>
     </div>
 
@@ -671,7 +694,7 @@
         const videoStage = document.getElementById("videoStage");
         const emptyState = document.querySelector(".empty-state");
         const previewStatus = document.getElementById("previewStatus");
-        const isStaticDemo = window.location.hostname.endsWith(".github.io");
+        const isStaticDemo = window.location.hostname.endsWith(".github.io") || window.location.hostname.endsWith(".netlify.app");
         let videoPlaylist = [];
         let playlistIndex = 0;
         let requestInProgress = false;
@@ -937,11 +960,35 @@
           appShell.hidden = false;
           document.getElementById("demoNotice").hidden = false;
           document.getElementById("logoutButton").hidden = true;
+          duration.value = "6";
+          duration.disabled = true;
+          updatePreviewMeta();
+          document.getElementById("durationHint").textContent =
+            "Static preview only. The linked free demo supports short clips up to about 8.5 seconds; queue and daily quota apply.";
+          document.getElementById("generateHint").textContent =
+            "Use the external free-demo link above for a short clip. A 60-second video needs the server backend.";
+          document.getElementById("providerHeading").textContent = "Short clips via LTX Video ZeroGPU";
+          document.getElementById("providerDescription").textContent =
+            "The shared external demo supports short clips only; the app's 60-second plan uses ten separate MiniMax clips.";
+          document.getElementById("workflowDescription").textContent =
+            "Copy your prompt, then paste it into the shared external video demo.";
+          document.getElementById("footerNotice").textContent =
+            "This static preview has no app sign-in or built-in video generation. Hugging Face receives prompts submitted in its demo; its shared daily quota and queue apply.";
+          document.getElementById("freeDemoLink").addEventListener("click", async () => {
+            const promptText = prompt.value.trim();
+            if (!promptText) return;
+            try {
+              await navigator.clipboard.writeText(promptText);
+              showMessage("Prompt copied. Paste it into the Hugging Face video demo.", false);
+            } catch {
+              showMessage("The prompt could not be copied automatically. Copy it from the prompt box before using the external demo.", true);
+            }
+          });
           generateButton.disabled = true;
           generateButton.textContent = "Video generation unavailable in free demo";
           previewStatus.textContent = "Preview only";
           showMessage(
-            "This free GitHub Pages demo shows the app interface. Sign-in and real AI video generation require a private server and a paid video-provider account.",
+            "This free static preview cannot generate videos inside the app. Use the shared short-video demo above; its daily quota is limited and your prompt is sent to Hugging Face.",
             true,
           );
           return;
