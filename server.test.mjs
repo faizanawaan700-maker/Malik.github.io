@@ -127,7 +127,8 @@ test("serves the login screen and protects it with same-origin browser policy", 
     assert.match(html, /hostname\.endsWith\("\.github\.io"\).*hostname\.endsWith\("\.netlify\.app"\)/);
     assert.match(html, /Static preview only\./);
     assert.match(html, /60-second MP4 · 10 clips merged/);
-    assert.match(html, /No payment is collected in this app/);
+    assert.match(html, /Free for clients\. The studio owner pays AI provider charges/);
+    assert.match(html, /id="generateHint"/);
     assert.match(html, /function setGenerationAvailability\(ready\)/);
     assert.match(html, /generateButton\.disabled = ready !== true/);
     assert.match(html, /Video generation is not configured on the private server/);

@@ -527,7 +527,7 @@
 
     <div id="appShell" hidden>
     <aside class="shell demo-notice" id="demoNotice" role="status" hidden>
-      <p class="demo-copy"><strong>Static preview only.</strong> Sign-in and in-app generation are disabled here. Run this app on localhost or a private Node host with a configured server-side Replicate token to generate video.</p>
+      <strong>Static preview only.</strong> Sign-in and video generation are disabled on this static page. Run the app on localhost to use its private Replicate backend.
     </aside>
     <header class="topbar shell">
       <a class="brand" href="./" aria-label="AI Video Studio home">
@@ -599,7 +599,7 @@
 
             <div class="submit-row">
               <button class="generate-button" type="submit"><span aria-hidden="true">✦</span> Generate video</button>
-              <p class="submit-hint" id="generateHint">No payment is collected in this app. Each generation uses paid Replicate credits charged to the app owner.</p>
+              <p class="submit-hint" id="generateHint">Free for clients. The studio owner pays AI provider charges. Premium lengths will open after payment setup.</p>
             </div>
           </form>
         </section>
@@ -640,7 +640,7 @@
         </article>
         <article class="feature">
           <span class="feature-icon" aria-hidden="true">✦</span>
-          <div><h2 id="providerHeading">Powered by MiniMax Video-01</h2><p id="providerDescription">The 60-second option combines ten AI clips into one MP4. Clip-to-clip consistency can vary.</p></div>
+          <div><h2>Powered by MiniMax Video-01</h2><p>60 seconds combines ten AI clips. Clip-to-clip consistency can vary.</p></div>
         </article>
       </section>
       <footer class="footer" id="footerNotice">Sign in with Google or GitHub. Video generation uses the studio owner's Replicate account and may incur provider charges; API tokens stay on the server.</footer>
@@ -939,26 +939,13 @@
           appShell.hidden = false;
           document.getElementById("demoNotice").hidden = false;
           document.getElementById("logoutButton").hidden = true;
-          duration.value = "6";
-          duration.disabled = true;
-          updatePreviewMeta();
-          document.getElementById("durationHint").textContent =
-            "Static preview only. Run the app on localhost or a private Node host with the server-side Replicate token to generate real video.";
-          document.getElementById("generateHint").textContent =
-            "This static page cannot generate video. Use the authenticated local/private app backend.";
-          document.getElementById("providerHeading").textContent = "Private server required";
-          document.getElementById("providerDescription").textContent =
-            "Real generation uses the app's authenticated backend and Replicate integration, not a public demo provider.";
-          document.getElementById("workflowDescription").textContent =
-            "Open the app on localhost or a private host to use the live backend.";
-          document.querySelector(".empty-state h3").textContent = "Preview only";
-          document.querySelector(".empty-state p").textContent =
-            "This static page does not have access to the server-side video generator.";
-          document.getElementById("footerNotice").textContent =
-            "This static preview is read-only. Real generation runs only on the authenticated local/private backend with a server-side Replicate token.";
           generateButton.disabled = true;
           generateButton.textContent = "Video generation unavailable in static preview";
           previewStatus.textContent = "Preview only";
+          showMessage(
+            "This static page only shows the app interface. Sign-in and real AI video generation require the private Node server.",
+            true,
+          );
           return;
         }
 

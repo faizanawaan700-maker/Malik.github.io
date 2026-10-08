@@ -14,7 +14,7 @@ The separate Node backend uses paid MiniMax Video-01 through Replicate. A six-se
 
 ## Requirements
 
-- Node.js 22 or newer.
+- Node.js 22.9 or newer.
 - The optional `ffmpeg-static` dependency installs a platform-specific FFmpeg binary for server-side MP4 encoding (standard Node-host installs include it). Set `FFMPEG_PATH` only if you need to use a separately installed FFmpeg binary.
 - A Replicate account and API token with access to the [`minimax/video-01` model](https://replicate.com/minimax/video-01).
 - A private session signing secret; generate one with `node -p "require('node:crypto').randomBytes(32).toString('base64url')"`
@@ -41,22 +41,23 @@ Set `APP_USERNAME` and a strong `APP_PASSWORD` of at least 16 characters to enab
 
 ## Run locally
 
-In PowerShell, set environment variables for the current terminal session and start the server:
+In PowerShell, copy the private environment template and edit it locally:
 
 ```powershell
-$env:REPLICATE_API_TOKEN = "your-private-replicate-token"
-$env:APP_SESSION_SECRET = "paste-the-random-session-secret-you-generated"
-$env:APP_BASE_URL = "http://localhost:3000"
-$env:APP_USERNAME = "studio-owner"
-$env:APP_PASSWORD = "use-a-private-password-at-least-16-characters"
-$env:GOOGLE_CLIENT_ID = "your-google-client-id"
-$env:GOOGLE_CLIENT_SECRET = "your-google-client-secret"
-$env:GITHUB_CLIENT_ID = "your-github-client-id"
-$env:GITHUB_CLIENT_SECRET = "your-github-client-secret"
+Copy-Item .env.example .env
+notepad .env
+node -p "require('node:crypto').randomBytes(32).toString('base64url')"
+```
+
+In `.env`, set `REPLICATE_API_TOKEN` to your private Replicate token, `APP_SESSION_SECRET` to the generated random value, `APP_USERNAME`, and an `APP_PASSWORD` of at least 16 characters. Set `APP_BASE_URL=http://localhost:3000`. Google/GitHub credentials are optional if using the owner password form. Never paste the token into frontend code or chat; `.env` is git-ignored and is loaded only by the local Node server.
+
+Start the backend and open the local app:
+
+```powershell
 npm.cmd start
 ```
 
-Open `http://localhost:3000` in your browser; do not open `index.html` directly or serve the generated `dist/` directory. Localhost, loopback, and private LAN hosts served by `npm.cmd start` use the authenticated Node server mode, not the static demo. Sign in with the owner credentials or configure OAuth. Generation is enabled only after the server reports a Replicate token and session secret are configured. Keep `REPLICATE_API_TOKEN` in the server's environment only; it is never sent to the browser. The `.github.io` and `.netlify.app` previews, the Netlify `dist/` build, and `file://` pages, remain static and cannot generate videos.
+Open `http://localhost:3000` in your browser; do not open `index.html` directly or serve the generated `dist/` directory. Localhost, loopback, and private LAN hosts served by `npm.cmd start` use the authenticated Node server mode, not the static preview. Sign in with the owner credentials or configure OAuth. Generation is enabled only after the server reports a Replicate token and session secret are configured; Replicate generation uses provider credits and is not free. If generation reports a missing token or billing/credit, configure your Replicate account before retrying. The `.github.io` and `.netlify.app` previews, the Netlify `dist/` build, and `file://` pages remain static and cannot generate videos.
 
 Register `http://localhost:3000/api/auth/callback/google` and/or `http://localhost:3000/api/auth/callback/github` as the provider callback URI for local development. Do not use HTTP for a non-local deployment. `.env.example` lists all supported settings.
 
